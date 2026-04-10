@@ -6721,6 +6721,8 @@ def create_pj_summary_pl_cr_manhour_all_project_excel(
         iSeconds: int = int(objMatch.group(3))
         return (iHours * 3600 + iMinutes * 60 + iSeconds) / 86400.0
 
+    objSheetNamePattern = re.compile(r"^(P\d{5}|[A-OQ-Z]\d{3})")
+
     objValidInputs: List[Tuple[str, str]] = [
         (pszProjectName, pszInputPath)
         for pszProjectName, pszInputPath in objProjectInputs
@@ -6745,7 +6747,11 @@ def create_pj_summary_pl_cr_manhour_all_project_excel(
             objSheet = objTemplateSheet
         else:
             objSheet = objWorkbook.copy_worksheet(objTemplateSheet)
-        objSheet.title = pszProjectName
+        objSheetNameMatch = objSheetNamePattern.match(pszProjectName)
+        if objSheetNameMatch:
+            objSheet.title = objSheetNameMatch.group(1)
+        else:
+            objSheet.title = pszProjectName
         objRows = read_tsv_rows(pszInputPath)
         for iRowIndex, objRow in enumerate(objRows, start=1):
             pszRowLabel: str = objRow[0] if len(objRow) >= 1 else ""
