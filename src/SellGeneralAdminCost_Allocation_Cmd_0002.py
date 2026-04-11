@@ -969,17 +969,28 @@ def _build_pj_summary_group_total_paths() -> Tuple[str, str]:
     return pszTemplatePath, pszOutputPath
 
 
-def _build_pj_summary_company_total_paths() -> Tuple[str, str]:
+def _build_pj_summary_company_total_paths(pszOrgMode: str) -> Tuple[str, str]:
     pszScriptDirectory: str = os.path.dirname(os.path.abspath(__file__))
-    pszTemplatePath: str = os.path.join(
-        pszScriptDirectory,
-        "TEMPLATE_PJサマリ_カンパニー別合計.xlsx",
-    )
-    pszOutputPath: str = os.path.join(
-        pszScriptDirectory,
-        "PJサマリ",
-        "PJサマリ_カンパニー別合計.xlsx",
-    )
+    if pszOrgMode == "new":
+        pszTemplatePath: str = os.path.join(
+            pszScriptDirectory,
+            "TEMPLATE_PJサマリ_Div別合計.xlsx",
+        )
+        pszOutputPath: str = os.path.join(
+            pszScriptDirectory,
+            "PJサマリ",
+            "PJサマリ_Div別合計.xlsx",
+        )
+    else:
+        pszTemplatePath = os.path.join(
+            pszScriptDirectory,
+            "TEMPLATE_PJサマリ_カンパニー別合計.xlsx",
+        )
+        pszOutputPath = os.path.join(
+            pszScriptDirectory,
+            "PJサマリ",
+            "PJサマリ_カンパニー別合計.xlsx",
+        )
     return pszTemplatePath, pszOutputPath
 
 
@@ -1036,8 +1047,9 @@ def insert_step0006_rows_into_company_summary_excel(
     objRows: List[List[str]],
     objStart: Tuple[int, int],
     objEnd: Tuple[int, int],
+    pszOrgMode: str,
 ) -> None:
-    pszTemplatePath, pszOutputPath = _build_pj_summary_company_total_paths()
+    pszTemplatePath, pszOutputPath = _build_pj_summary_company_total_paths(pszOrgMode)
     pszSheetName: str = _build_pj_summary_group_sheet_name(objStart, objEnd)
     if not os.path.isfile(pszTemplatePath):
         return
@@ -1061,9 +1073,10 @@ def insert_step0006_rows_into_company_summary_excel(
     os.makedirs(os.path.dirname(pszOutputPath), exist_ok=True)
     objWorkbook.save(pszOutputPath)
     if EXECUTION_ROOT_DIRECTORY:
+        pszOutputSubDirectoryName: str = "Div別損益" if pszOrgMode == "new" else "カンパニー別損益"
         pszCompanyProfitDirectory = os.path.join(
             EXECUTION_ROOT_DIRECTORY,
-            "カンパニー別損益",
+            pszOutputSubDirectoryName,
         )
         os.makedirs(pszCompanyProfitDirectory, exist_ok=True)
         shutil.copy2(
@@ -3658,6 +3671,39 @@ def build_step0003_rows(
     return objOutputRows
 
 
+def detect_step0004_org_mode(objRows: List[List[str]]) -> str:
+    objLegacyNameSet = {"第一インキュ", "第二インキュ", "第三インキュ", "第四インキュ"}
+    objNewNameSet = {
+        "テクノロジーインキュベーション",
+        "コンテンツビジネス",
+        "スタートアップサイド",
+        "スタートアップコミュニティ",
+        "スタートアップグロース",
+        "経営管理",
+    }
+    objFirstColumnNames: set[str] = set()
+    for objRow in objRows:
+        if not objRow:
+            continue
+        pszName = objRow[0].strip()
+        if pszName != "":
+            objFirstColumnNames.add(pszName)
+
+    bHasLegacyExclusive: bool = bool(objFirstColumnNames & objLegacyNameSet)
+    bHasNewExclusive: bool = bool(objFirstColumnNames & objNewNameSet)
+    if bHasLegacyExclusive and bHasNewExclusive:
+        raise ValueError(
+            "step0004 集計エラー: 旧組織名と新組織名が同時に存在します。"
+        )
+    if bHasLegacyExclusive:
+        return "legacy"
+    if bHasNewExclusive:
+        return "new"
+    raise ValueError(
+        "step0004 集計エラー: 組織判定キー(旧4分類/新6分類)が見つかりません。"
+    )
+
+
 def build_step0004_rows_for_summary(objRows: List[List[str]]) -> List[List[str]]:
     if not objRows:
         return []
@@ -3681,8 +3727,6 @@ def build_step0004_rows_for_summary(objRows: List[List[str]]) -> List[List[str]]
         "投資先",
         "本部",
     ]
-    objLegacyNameSet = set(objLegacyExclusiveNames)
-    objNewNameSet = set(objNewExclusiveNames)
     objHeaderRow: List[str] = objRows[0]
     objTotalRow: Optional[List[str]] = None
     objFirstColumnNames: set[str] = set()
@@ -3697,20 +3741,11 @@ def build_step0004_rows_for_summary(objRows: List[List[str]]) -> List[List[str]]
         elif pszName == "合計" and objTotalRow is None:
             objTotalRow = objRow
 
-    bHasLegacyExclusive: bool = bool(objFirstColumnNames & objLegacyNameSet)
-    bHasNewExclusive: bool = bool(objFirstColumnNames & objNewNameSet)
-    if bHasLegacyExclusive and bHasNewExclusive:
-        raise ValueError(
-            "step0004 集計エラー: 旧組織名と新組織名が同時に存在します。"
-        )
-    if bHasLegacyExclusive:
+    pszOrgMode: str = detect_step0004_org_mode(objRows)
+    if pszOrgMode == "legacy":
         objTargetNames: List[str] = objLegacyExclusiveNames + objCommonNames
-    elif bHasNewExclusive:
-        objTargetNames = objNewExclusiveNames + objCommonNames
     else:
-        raise ValueError(
-            "step0004 集計エラー: 組織判定キー(旧4分類/新6分類)が見つかりません。"
-        )
+        objTargetNames = objNewExclusiveNames + objCommonNames
 
     objTargetSet = set(objTargetNames)
     iMaxColumns: int = max(len(objRow) for objRow in objRows) if objRows else 0
@@ -5006,7 +5041,9 @@ def create_pj_summary(
         f"0004_PJサマリ_step0004_単月_損益計算書_{iEndYear}年{pszEndMonth}月.tsv",
     )
     objSingleStep0003Rows = read_tsv_rows(pszSingleStep0003Path)
+    pszSummaryOrgMode: str = "legacy"
     try:
+        pszSummaryOrgMode = detect_step0004_org_mode(objSingleStep0003Rows)
         objSingleStep0004Rows = build_step0004_rows_for_summary(objSingleStep0003Rows)
     except ValueError as exc:
         write_step0004_error_file(pszSingleStep0004Path, exc)
@@ -5158,6 +5195,9 @@ def create_pj_summary(
     )
     objCumulativeStep0003Rows = read_tsv_rows(pszCumulativeStep0003Path)
     try:
+        pszCumulativeOrgMode = detect_step0004_org_mode(objCumulativeStep0003Rows)
+        if pszSummaryOrgMode != pszCumulativeOrgMode:
+            raise ValueError("step0004 集計エラー: 単月と累計で組織判定結果が一致しません。")
         objCumulativeStep0004Rows = build_step0004_rows_for_summary(objCumulativeStep0003Rows)
     except ValueError as exc:
         write_step0004_error_file(pszCumulativeStep0004Path, exc)
@@ -5194,6 +5234,7 @@ def create_pj_summary(
             objStep0007Rows,
             objStart,
             objEnd,
+            pszSummaryOrgMode,
         )
 
     objSingleOutputRows: List[List[str]] = []
