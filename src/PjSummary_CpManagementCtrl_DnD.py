@@ -80,6 +80,9 @@ BUTTON_LABELS: Tuple[str, ...] = (
 )
 ALL_PROJECT_FILE_NAME: str = "PJサマリ_単・累計_AllProject.xlsx"
 ALL_PROJECT_SELECTION_TOKEN: str = "__ALLPROJECT__"
+COMPANY_OR_DIVISION_FILE_NAME: str = "company_or_division.txt"
+COMPANY_OR_DIVISION_COMPANY: str = "company"
+COMPANY_OR_DIVISION_DIVISION: str = "division"
 
 
 def show_message_box(
@@ -209,6 +212,23 @@ def extract_project_code_from_file_name(pszFileName: str) -> Optional[str]:
     if pszBody == "":
         return None
     return pszBody.split("_", 1)[0]
+
+
+def read_company_or_division_mode(pszExecutionRoot: str) -> Optional[str]:
+    pszModePath = os.path.join(pszExecutionRoot, COMPANY_OR_DIVISION_FILE_NAME)
+    if not os.path.isfile(pszModePath):
+        return None
+    try:
+        with open(pszModePath, "r", encoding="utf-8", newline="") as objFile:
+            pszMode = objFile.read().strip().lower()
+    except OSError:
+        return None
+    if pszMode in (
+        COMPANY_OR_DIVISION_COMPANY,
+        COMPANY_OR_DIVISION_DIVISION,
+    ):
+        return pszMode
+    return None
 
 
 def is_valid_project_code(pszCode: str) -> bool:
@@ -800,11 +820,26 @@ def handle_company_pl_left_down() -> None:
             "SellGeneralAdminCost_Allocation_DnD",
         )
         return
-    pszCompanyDirectory = os.path.join(pszExecutionRoot, "カンパニー別損益")
-    pszTargetPath = os.path.join(
-        pszCompanyDirectory,
-        "PJサマリ_カンパニー別合計.xlsx",
-    )
+    pszMode = read_company_or_division_mode(pszExecutionRoot)
+    if pszMode is None:
+        pszModePath = os.path.join(pszExecutionRoot, COMPANY_OR_DIVISION_FILE_NAME)
+        show_error_message_box(
+            "Error: 判定ファイルが見つからないか不正です。\n" + pszModePath,
+            "SellGeneralAdminCost_Allocation_DnD",
+        )
+        return
+    if pszMode == COMPANY_OR_DIVISION_DIVISION:
+        pszCompanyDirectory = os.path.join(pszExecutionRoot, "Div別損益")
+        pszTargetPath = os.path.join(
+            pszCompanyDirectory,
+            "PJサマリ_Div別合計.xlsx",
+        )
+    else:
+        pszCompanyDirectory = os.path.join(pszExecutionRoot, "カンパニー別損益")
+        pszTargetPath = os.path.join(
+            pszCompanyDirectory,
+            "PJサマリ_カンパニー別合計.xlsx",
+        )
     if not os.path.isfile(pszTargetPath):
         show_error_message_box(
             "Error: ファイルが見つかりません。\n" + pszTargetPath,
@@ -822,7 +857,18 @@ def handle_company_pl_right_down() -> None:
             "SellGeneralAdminCost_Allocation_DnD",
         )
         return
-    pszCompanyDirectory = os.path.join(pszExecutionRoot, "カンパニー別損益")
+    pszMode = read_company_or_division_mode(pszExecutionRoot)
+    if pszMode is None:
+        pszModePath = os.path.join(pszExecutionRoot, COMPANY_OR_DIVISION_FILE_NAME)
+        show_error_message_box(
+            "Error: 判定ファイルが見つからないか不正です。\n" + pszModePath,
+            "SellGeneralAdminCost_Allocation_DnD",
+        )
+        return
+    if pszMode == COMPANY_OR_DIVISION_DIVISION:
+        pszCompanyDirectory = os.path.join(pszExecutionRoot, "Div別損益")
+    else:
+        pszCompanyDirectory = os.path.join(pszExecutionRoot, "カンパニー別損益")
     if not os.path.isdir(pszCompanyDirectory):
         show_error_message_box(
             "Error: フォルダーが見つかりません。\n" + pszCompanyDirectory,
