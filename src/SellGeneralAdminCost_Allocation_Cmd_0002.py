@@ -3661,28 +3661,58 @@ def build_step0003_rows(
 def build_step0004_rows_for_summary(objRows: List[List[str]]) -> List[List[str]]:
     if not objRows:
         return []
-    objTargetNames: List[str] = [
+    objLegacyExclusiveNames: List[str] = [
         "第一インキュ",
         "第二インキュ",
         "第三インキュ",
         "第四インキュ",
+    ]
+    objNewExclusiveNames: List[str] = [
+        "テクノロジーインキュベーション",
+        "コンテンツビジネス",
+        "スタートアップサイド",
+        "スタートアップコミュニティ",
+        "スタートアップグロース",
+        "経営管理",
+    ]
+    objCommonNames: List[str] = [
         "事業開発",
         "子会社",
         "投資先",
         "本部",
     ]
-    objTargetSet = set(objTargetNames)
+    objLegacyNameSet = set(objLegacyExclusiveNames)
+    objNewNameSet = set(objNewExclusiveNames)
     objHeaderRow: List[str] = objRows[0]
     objTotalRow: Optional[List[str]] = None
+    objFirstColumnNames: set[str] = set()
     for objRow in objRows:
         if not objRow:
             continue
         pszName = objRow[0].strip()
+        if pszName != "":
+            objFirstColumnNames.add(pszName)
         if pszName == "科目名":
             objHeaderRow = objRow
         elif pszName == "合計" and objTotalRow is None:
             objTotalRow = objRow
 
+    bHasLegacyExclusive: bool = bool(objFirstColumnNames & objLegacyNameSet)
+    bHasNewExclusive: bool = bool(objFirstColumnNames & objNewNameSet)
+    if bHasLegacyExclusive and bHasNewExclusive:
+        raise ValueError(
+            "step0004 集計エラー: 旧組織名と新組織名が同時に存在します。"
+        )
+    if bHasLegacyExclusive:
+        objTargetNames: List[str] = objLegacyExclusiveNames + objCommonNames
+    elif bHasNewExclusive:
+        objTargetNames = objNewExclusiveNames + objCommonNames
+    else:
+        raise ValueError(
+            "step0004 集計エラー: 組織判定キー(旧4分類/新6分類)が見つかりません。"
+        )
+
+    objTargetSet = set(objTargetNames)
     iMaxColumns: int = max(len(objRow) for objRow in objRows) if objRows else 0
     objTotalsByName: Dict[str, List[float]] = {
         pszName: [0.0] * iMaxColumns for pszName in objTargetNames
@@ -4470,6 +4500,24 @@ def create_pj_summary(
     create_step0007: bool = True,
     bWriteTotalsExcel: bool = False,
 ) -> None:
+    def write_step0004_error_file(pszStep0004Path: str, exc: Exception) -> None:
+        pszErrorPath: str = pszStep0004Path.replace(".tsv", "_error.txt")
+        try:
+            with open(pszErrorPath, "w", encoding="utf-8", newline="") as objErrorFile:
+                objErrorFile.write(f"Error: {exc}\n")
+                objErrorFile.write(
+                    "旧組織判定キー: 第一インキュ, 第二インキュ, 第三インキュ, 第四インキュ\n"
+                )
+                objErrorFile.write(
+                    "新組織判定キー: テクノロジーインキュベーション, コンテンツビジネス, "
+                    "スタートアップサイド, スタートアップコミュニティ, スタートアップグロース, 経営管理\n"
+                )
+                objErrorFile.write(
+                    "共通カテゴリ: 事業開発, 子会社, 投資先, 本部\n"
+                )
+        except OSError:
+            pass
+
     objStart, objEnd = objRange
     pszDirectory: str = get_script_base_directory()
     iEndYear, iEndMonth = objEnd
@@ -4958,7 +5006,11 @@ def create_pj_summary(
         f"0004_PJサマリ_step0004_単月_損益計算書_{iEndYear}年{pszEndMonth}月.tsv",
     )
     objSingleStep0003Rows = read_tsv_rows(pszSingleStep0003Path)
-    objSingleStep0004Rows = build_step0004_rows_for_summary(objSingleStep0003Rows)
+    try:
+        objSingleStep0004Rows = build_step0004_rows_for_summary(objSingleStep0003Rows)
+    except ValueError as exc:
+        write_step0004_error_file(pszSingleStep0004Path, exc)
+        return
     write_tsv_rows(pszSingleStep0004Path, objSingleStep0004Rows)
     pszSingleStep0005Path: str = os.path.join(
         pszDirectory,
@@ -5105,7 +5157,11 @@ def create_pj_summary(
         ),
     )
     objCumulativeStep0003Rows = read_tsv_rows(pszCumulativeStep0003Path)
-    objCumulativeStep0004Rows = build_step0004_rows_for_summary(objCumulativeStep0003Rows)
+    try:
+        objCumulativeStep0004Rows = build_step0004_rows_for_summary(objCumulativeStep0003Rows)
+    except ValueError as exc:
+        write_step0004_error_file(pszCumulativeStep0004Path, exc)
+        return
     write_tsv_rows(pszCumulativeStep0004Path, objCumulativeStep0004Rows)
     pszCumulativeStep0005Path: str = os.path.join(
         pszDirectory,
