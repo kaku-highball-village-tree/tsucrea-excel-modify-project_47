@@ -4535,6 +4535,20 @@ def create_pj_summary(
     create_step0007: bool = True,
     bWriteTotalsExcel: bool = False,
 ) -> None:
+    def write_company_or_division_file(pszOrgMode: str) -> None:
+        if EXECUTION_ROOT_DIRECTORY is None:
+            return
+        pszModePath: str = os.path.join(
+            EXECUTION_ROOT_DIRECTORY,
+            "company_or_division.txt",
+        )
+        pszModeLabel: str = "division" if pszOrgMode == "new" else "company"
+        try:
+            with open(pszModePath, "w", encoding="utf-8", newline="") as objModeFile:
+                objModeFile.write(pszModeLabel + "\n")
+        except OSError:
+            return
+
     def write_step0004_error_file(pszStep0004Path: str, exc: Exception) -> None:
         pszErrorPath: str = pszStep0004Path.replace(".tsv", "_error.txt")
         try:
@@ -5230,6 +5244,7 @@ def create_pj_summary(
     pszStep0007Path: str = pszStep0006Path.replace("step0006_", "step0007_", 1)
     write_tsv_rows(pszStep0007Path, objStep0007Rows)
     if objStart != objEnd and bWriteTotalsExcel:
+        write_company_or_division_file(pszSummaryOrgMode)
         insert_step0006_rows_into_company_summary_excel(
             objStep0007Rows,
             objStart,
