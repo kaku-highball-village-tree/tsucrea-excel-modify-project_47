@@ -893,7 +893,13 @@ def handle_cp_management_company_left_down() -> None:
             "SellGeneralAdminCost_Allocation_DnD",
         )
         return
-    pszPrefix = "CP別経営管理_計上カンパニー_累計_"
+    pszMode = read_company_or_division_mode(pszExecutionRoot)
+    if pszMode == COMPANY_OR_DIVISION_DIVISION:
+        pszPrefix = "CP別経営管理_計上div_累計_"
+        pszNotFoundName = "CP別経営管理_計上div_累計_yyyy年mm月-yyyy年mm月.xlsx"
+    else:
+        pszPrefix = "CP別経営管理_計上カンパニー_累計_"
+        pszNotFoundName = "CP別経営管理_計上カンパニー_累計_yyyy年mm月-yyyy年mm月.xlsx"
     objCandidates = [
         pszName
         for pszName in os.listdir(pszCompanyDirectory)
@@ -902,7 +908,7 @@ def handle_cp_management_company_left_down() -> None:
     if not objCandidates:
         pszTargetPath = os.path.join(
             pszCompanyDirectory,
-            "CP別経営管理_計上カンパニー_累計_yyyy年mm月-yyyy年mm月.xlsx",
+            pszNotFoundName,
         )
         show_error_message_box(
             "Error: ファイルが見つかりません。\n" + pszTargetPath,

@@ -8369,6 +8369,24 @@ def parse_tsv_value_for_excel(pszValue: str) -> Optional[object]:
 
 
 def create_cp_company_step0009_excel(pszScriptDirectory: str) -> Optional[str]:
+    def read_company_or_division_mode_label() -> Optional[str]:
+        if not EXECUTION_ROOT_DIRECTORY:
+            return None
+        pszModePath: str = os.path.join(
+            EXECUTION_ROOT_DIRECTORY,
+            "company_or_division.txt",
+        )
+        if not os.path.isfile(pszModePath):
+            return None
+        try:
+            with open(pszModePath, "r", encoding="utf-8", newline="") as objModeFile:
+                pszModeLabel: str = objModeFile.read().strip().lower()
+        except OSError:
+            return None
+        if pszModeLabel in ("company", "division"):
+            return pszModeLabel
+        return None
+
     pszTargetDirectory: str = os.path.join(pszScriptDirectory, "0001_CP別_step0009")
     if not os.path.isdir(pszTargetDirectory):
         return None
@@ -8442,9 +8460,16 @@ def create_cp_company_step0009_excel(pszScriptDirectory: str) -> Optional[str]:
         if not objTsvPaths:
             return None
 
+    pszModeLabel = read_company_or_division_mode_label()
+    if pszModeLabel == "division":
+        pszTemplateFileName = "TEMPLATE_CP別経営管理_計上div_累計.xlsx"
+        pszOutputFileNamePrefix = "CP別経営管理_計上div_累計"
+    else:
+        pszTemplateFileName = "TEMPLATE_CP別経営管理_計上カンパニー_累計.xlsx"
+        pszOutputFileNamePrefix = "CP別経営管理_計上カンパニー_累計"
     pszTemplatePath: str = os.path.join(
         pszScriptDirectory,
-        "TEMPLATE_CP別経営管理_計上カンパニー_累計.xlsx",
+        pszTemplateFileName,
     )
     if not os.path.isfile(pszTemplatePath):
         return None
@@ -8473,10 +8498,10 @@ def create_cp_company_step0009_excel(pszScriptDirectory: str) -> Optional[str]:
         pszStartLabel = f"{iStartYear}年{iStartMonth:02d}月"
         pszEndLabel = f"{iEndYear}年{iEndMonth:02d}月"
         pszOutputFileName = (
-            f"CP別経営管理_計上カンパニー_累計_{pszStartLabel}-{pszEndLabel}.xlsx"
+            f"{pszOutputFileNamePrefix}_{pszStartLabel}-{pszEndLabel}.xlsx"
         )
     else:
-        pszOutputFileName = "CP別経営管理_計上カンパニー_累計.xlsx"
+        pszOutputFileName = f"{pszOutputFileNamePrefix}.xlsx"
     pszOutputPath: str = os.path.join(
         pszTargetDirectory,
         pszOutputFileName,
