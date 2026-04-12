@@ -2789,7 +2789,7 @@ def write_step0006_pj_summary(
     objSingleHeader: List[str] = objSingleRows[0] if objSingleRows else []
     objCumulativeHeader: List[str] = objCumulativeRows[0] if objCumulativeRows else []
     iMaxColumns: int = max(len(objSingleHeader), len(objCumulativeHeader))
-    objSingleOnlyColumnNames = {"計上カンパニー", "計上グループ", "科目名"}
+    objSingleOnlyColumnNames = {"計上div", "計上カンパニー", "計上グループ", "科目名"}
     objSingleOnlyIndices = {
         iColumnIndex
         for iColumnIndex in range(1, iMaxColumns)
@@ -3357,7 +3357,7 @@ def load_org_table_company_map(pszOrgTablePath: str) -> Dict[str, str]:
 
     objHeader = objRows[0]
     iCodeIndex = find_column_index(objHeader, "PJコード")
-    objCompanyColumnCandidates = ["計上カンパニー名", "計上カンパニー"]
+    objCompanyColumnCandidates = ["計上div名", "計上div", "計上カンパニー名", "計上カンパニー"]
     iCompanyIndex = -1
     for pszColumn in objCompanyColumnCandidates:
         iCompanyIndex = find_column_index(objHeader, pszColumn)
@@ -3471,7 +3471,7 @@ def insert_accounting_company_column(
         pszProjectName: str = objRow[1].strip() if len(objRow) > 1 else ""
         if pszProjectName == "科目名":
             objOutputRows.append(
-                ["計上カンパニー"] + (objRow if objRow else [])
+                ["計上div"] + (objRow if objRow else [])
             )
             continue
 
@@ -3496,7 +3496,7 @@ def get_headquarters_company_from_org_table(pszOrgTablePath: str) -> str:
 
     objHeader = objRows[0]
     iCodeIndex = find_column_index(objHeader, "PJコード")
-    objCompanyColumnCandidates = ["計上カンパニー名", "計上カンパニー"]
+    objCompanyColumnCandidates = ["計上div名", "計上div", "計上カンパニー名", "計上カンパニー"]
     iCompanyIndex = -1
     for pszColumn in objCompanyColumnCandidates:
         iCompanyIndex = find_column_index(objHeader, pszColumn)
@@ -3530,7 +3530,9 @@ def fill_headquarters_company_in_rows(
         return objRows
 
     objHeader = objRows[0]
-    iCompanyIndex = find_column_index(objHeader, "計上カンパニー")
+    iCompanyIndex = find_column_index(objHeader, "計上div")
+    if iCompanyIndex < 0:
+        iCompanyIndex = find_column_index(objHeader, "計上カンパニー")
     iGroupIndex = find_column_index(objHeader, "計上グループ")
     if iCompanyIndex < 0 or iGroupIndex < 0:
         return objRows
