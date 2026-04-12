@@ -969,17 +969,28 @@ def _build_pj_summary_group_total_paths() -> Tuple[str, str]:
     return pszTemplatePath, pszOutputPath
 
 
-def _build_pj_summary_company_total_paths() -> Tuple[str, str]:
+def _build_pj_summary_company_total_paths(pszOrgMode: str) -> Tuple[str, str]:
     pszScriptDirectory: str = os.path.dirname(os.path.abspath(__file__))
-    pszTemplatePath: str = os.path.join(
-        pszScriptDirectory,
-        "TEMPLATE_PJサマリ_カンパニー別合計.xlsx",
-    )
-    pszOutputPath: str = os.path.join(
-        pszScriptDirectory,
-        "PJサマリ",
-        "PJサマリ_カンパニー別合計.xlsx",
-    )
+    if pszOrgMode == "new":
+        pszTemplatePath: str = os.path.join(
+            pszScriptDirectory,
+            "TEMPLATE_PJサマリ_Div別合計.xlsx",
+        )
+        pszOutputPath: str = os.path.join(
+            pszScriptDirectory,
+            "PJサマリ",
+            "PJサマリ_Div別合計.xlsx",
+        )
+    else:
+        pszTemplatePath = os.path.join(
+            pszScriptDirectory,
+            "TEMPLATE_PJサマリ_カンパニー別合計.xlsx",
+        )
+        pszOutputPath = os.path.join(
+            pszScriptDirectory,
+            "PJサマリ",
+            "PJサマリ_カンパニー別合計.xlsx",
+        )
     return pszTemplatePath, pszOutputPath
 
 
@@ -1036,8 +1047,9 @@ def insert_step0006_rows_into_company_summary_excel(
     objRows: List[List[str]],
     objStart: Tuple[int, int],
     objEnd: Tuple[int, int],
+    pszOrgMode: str,
 ) -> None:
-    pszTemplatePath, pszOutputPath = _build_pj_summary_company_total_paths()
+    pszTemplatePath, pszOutputPath = _build_pj_summary_company_total_paths(pszOrgMode)
     pszSheetName: str = _build_pj_summary_group_sheet_name(objStart, objEnd)
     if not os.path.isfile(pszTemplatePath):
         return
@@ -1061,9 +1073,10 @@ def insert_step0006_rows_into_company_summary_excel(
     os.makedirs(os.path.dirname(pszOutputPath), exist_ok=True)
     objWorkbook.save(pszOutputPath)
     if EXECUTION_ROOT_DIRECTORY:
+        pszOutputSubDirectoryName: str = "Div別損益" if pszOrgMode == "new" else "カンパニー別損益"
         pszCompanyProfitDirectory = os.path.join(
             EXECUTION_ROOT_DIRECTORY,
-            "カンパニー別損益",
+            pszOutputSubDirectoryName,
         )
         os.makedirs(pszCompanyProfitDirectory, exist_ok=True)
         shutil.copy2(
@@ -2776,7 +2789,7 @@ def write_step0006_pj_summary(
     objSingleHeader: List[str] = objSingleRows[0] if objSingleRows else []
     objCumulativeHeader: List[str] = objCumulativeRows[0] if objCumulativeRows else []
     iMaxColumns: int = max(len(objSingleHeader), len(objCumulativeHeader))
-    objSingleOnlyColumnNames = {"計上カンパニー", "計上グループ", "科目名"}
+    objSingleOnlyColumnNames = {"計上div", "計上カンパニー", "計上グループ", "科目名"}
     objSingleOnlyIndices = {
         iColumnIndex
         for iColumnIndex in range(1, iMaxColumns)
@@ -3344,7 +3357,7 @@ def load_org_table_company_map(pszOrgTablePath: str) -> Dict[str, str]:
 
     objHeader = objRows[0]
     iCodeIndex = find_column_index(objHeader, "PJコード")
-    objCompanyColumnCandidates = ["計上カンパニー名", "計上カンパニー"]
+    objCompanyColumnCandidates = ["計上div名", "計上div", "計上カンパニー名", "計上カンパニー"]
     iCompanyIndex = -1
     for pszColumn in objCompanyColumnCandidates:
         iCompanyIndex = find_column_index(objHeader, pszColumn)
@@ -3458,7 +3471,7 @@ def insert_accounting_company_column(
         pszProjectName: str = objRow[1].strip() if len(objRow) > 1 else ""
         if pszProjectName == "科目名":
             objOutputRows.append(
-                ["計上カンパニー"] + (objRow if objRow else [])
+                ["計上div"] + (objRow if objRow else [])
             )
             continue
 
@@ -3483,7 +3496,7 @@ def get_headquarters_company_from_org_table(pszOrgTablePath: str) -> str:
 
     objHeader = objRows[0]
     iCodeIndex = find_column_index(objHeader, "PJコード")
-    objCompanyColumnCandidates = ["計上カンパニー名", "計上カンパニー"]
+    objCompanyColumnCandidates = ["計上div名", "計上div", "計上カンパニー名", "計上カンパニー"]
     iCompanyIndex = -1
     for pszColumn in objCompanyColumnCandidates:
         iCompanyIndex = find_column_index(objHeader, pszColumn)
@@ -3517,7 +3530,9 @@ def fill_headquarters_company_in_rows(
         return objRows
 
     objHeader = objRows[0]
-    iCompanyIndex = find_column_index(objHeader, "計上カンパニー")
+    iCompanyIndex = find_column_index(objHeader, "計上div")
+    if iCompanyIndex < 0:
+        iCompanyIndex = find_column_index(objHeader, "計上カンパニー")
     iGroupIndex = find_column_index(objHeader, "計上グループ")
     if iCompanyIndex < 0 or iGroupIndex < 0:
         return objRows
@@ -3658,20 +3673,62 @@ def build_step0003_rows(
     return objOutputRows
 
 
+def detect_step0004_org_mode(objRows: List[List[str]]) -> str:
+    objLegacyNameSet = {"第一インキュ", "第二インキュ", "第三インキュ", "第四インキュ"}
+    objNewNameSet = {
+        "テクノロジーインキュベーション",
+        "コンテンツビジネス",
+        "スタートアップサイド",
+        "スタートアップコミュニティ",
+        "スタートアップグロース",
+        "経営管理",
+    }
+    objFirstColumnNames: set[str] = set()
+    for objRow in objRows:
+        if not objRow:
+            continue
+        pszName = objRow[0].strip()
+        if pszName != "":
+            objFirstColumnNames.add(pszName)
+
+    bHasLegacyExclusive: bool = bool(objFirstColumnNames & objLegacyNameSet)
+    bHasNewExclusive: bool = bool(objFirstColumnNames & objNewNameSet)
+    if bHasLegacyExclusive and bHasNewExclusive:
+        raise ValueError(
+            "step0004 集計エラー: 旧組織名と新組織名が同時に存在します。"
+        )
+    if bHasLegacyExclusive:
+        return "legacy"
+    if bHasNewExclusive:
+        return "new"
+    raise ValueError(
+        "step0004 集計エラー: 組織判定キー(旧4分類/新6分類)が見つかりません。"
+    )
+
+
 def build_step0004_rows_for_summary(objRows: List[List[str]]) -> List[List[str]]:
     if not objRows:
         return []
-    objTargetNames: List[str] = [
+    objLegacyExclusiveNames: List[str] = [
         "第一インキュ",
         "第二インキュ",
         "第三インキュ",
         "第四インキュ",
+    ]
+    objNewExclusiveNames: List[str] = [
+        "テクノロジーインキュベーション",
+        "コンテンツビジネス",
+        "スタートアップサイド",
+        "スタートアップコミュニティ",
+        "スタートアップグロース",
+        "経営管理",
+    ]
+    objCommonNames: List[str] = [
         "事業開発",
         "子会社",
         "投資先",
         "本部",
     ]
-    objTargetSet = set(objTargetNames)
     objHeaderRow: List[str] = objRows[0]
     objTotalRow: Optional[List[str]] = None
     for objRow in objRows:
@@ -3683,6 +3740,24 @@ def build_step0004_rows_for_summary(objRows: List[List[str]]) -> List[List[str]]
         elif pszName == "合計" and objTotalRow is None:
             objTotalRow = objRow
 
+    pszOrgMode: str = detect_step0004_org_mode(objRows)
+    if pszOrgMode == "legacy":
+        objTargetNames: List[str] = objLegacyExclusiveNames + objCommonNames
+    else:
+        objTargetNames = [
+            "コンテンツビジネス",
+            "スタートアップコミュニティ",
+            "スタートアップグロース",
+            "経営管理",
+            "テクノロジーインキュベーション",
+            "事業開発",
+            "スタートアップサイド",
+            "子会社",
+            "投資先",
+            "本部",
+        ]
+
+    objTargetSet = set(objTargetNames)
     iMaxColumns: int = max(len(objRow) for objRow in objRows) if objRows else 0
     objTotalsByName: Dict[str, List[float]] = {
         pszName: [0.0] * iMaxColumns for pszName in objTargetNames
@@ -3876,7 +3951,7 @@ def build_step0006_rows_for_summary(objRows: List[List[str]]) -> List[List[str]]
         -1,
     )
     if iAllocationIndex >= 0:
-        objLabelRow[iAllocationIndex] = "グループ別合計"
+        objLabelRow[iAllocationIndex] = "div別合計"
     return [objLabelRow] + [list(objRow) for objRow in objRows]
 
 
@@ -4470,6 +4545,41 @@ def create_pj_summary(
     create_step0007: bool = True,
     bWriteTotalsExcel: bool = False,
 ) -> None:
+    def write_company_or_division_file(pszOrgMode: str) -> None:
+        if EXECUTION_ROOT_DIRECTORY is None:
+            return
+        pszModePath: str = os.path.join(
+            EXECUTION_ROOT_DIRECTORY,
+            "company_or_division.txt",
+        )
+        pszModeLabel: str = "division" if pszOrgMode == "new" else "company"
+        try:
+            with open(pszModePath, "w", encoding="utf-8", newline="") as objModeFile:
+                objModeFile.write(pszModeLabel + "\n")
+        except OSError:
+            return
+
+    def write_step0004_error_file(pszStep0004Path: str, exc: Exception) -> None:
+        pszErrorPath: str = pszStep0004Path.replace(".tsv", "_error.txt")
+        try:
+            with open(pszErrorPath, "w", encoding="utf-8", newline="") as objErrorFile:
+                objErrorFile.write(f"Error: {exc}\n")
+                objErrorFile.write(
+                    "旧組織判定キー: 第一インキュ, 第二インキュ, 第三インキュ, 第四インキュ\n"
+                )
+                objErrorFile.write(
+                    "新組織判定キー: テクノロジーインキュベーション, コンテンツビジネス, "
+                    "スタートアップサイド, スタートアップコミュニティ, スタートアップグロース, 経営管理\n"
+                )
+                objErrorFile.write(
+                    "共通カテゴリ: 事業開発, 子会社, 投資先, 本部\n"
+                )
+        except OSError:
+            pass
+
+    pszSummaryOrgMode: Optional[str] = None
+    objSingleSummaryStep0003RowsCpCache: Optional[List[List[str]]] = None
+    objCumulativeSummaryStep0003RowsCpCache: Optional[List[List[str]]] = None
     objStart, objEnd = objRange
     pszDirectory: str = get_script_base_directory()
     iEndYear, iEndMonth = objEnd
@@ -4530,6 +4640,7 @@ def create_pj_summary(
                 read_tsv_rows(pszSingleSummaryStep0002PathCp),
                 objCompanyMapCpSingle,
             )
+            objSingleSummaryStep0003RowsCpCache = objSingleSummaryStep0003RowsCp
             write_tsv_rows(pszSingleSummaryStep0003PathCp, objSingleSummaryStep0003RowsCp)
             pszSingleSummaryStep0003DebugPathCp: str = pszSingleSummaryStep0003PathCp.replace(
                 ".tsv",
@@ -4766,6 +4877,7 @@ def create_pj_summary(
             read_tsv_rows(pszCumulativeSummaryStep0002PathCp),
             objCompanyMapCp,
         )
+        objCumulativeSummaryStep0003RowsCpCache = objCumulativeSummaryStep0003RowsCp
         write_tsv_rows(pszCumulativeSummaryStep0003PathCp, objCumulativeSummaryStep0003RowsCp)
         pszCumulativeSummaryStep0004PathCp0002: str = os.path.join(
             pszDirectory,
@@ -4880,11 +4992,20 @@ def create_pj_summary(
             pszCumulativeSummaryStep0005VerticalPathCp,
         ],
     )
+    if pszSummaryOrgMode is None:
+        try:
+            if objCumulativeSummaryStep0003RowsCpCache is not None:
+                pszSummaryOrgMode = detect_step0004_org_mode(objCumulativeSummaryStep0003RowsCpCache)
+            elif objSingleSummaryStep0003RowsCpCache is not None:
+                pszSummaryOrgMode = detect_step0004_org_mode(objSingleSummaryStep0003RowsCpCache)
+        except ValueError:
+            pszSummaryOrgMode = None
     copy_company_step0006_files(
         pszDirectory,
         [pszSingleSummaryStep0005VerticalPathCp, pszCumulativeSummaryStep0005VerticalPathCp],
         "0001_CP別_step0006",
         create_step0007=create_step0007,
+        pszOrgMode=pszSummaryOrgMode,
     )
     copy_group_step0006_files(
         pszDirectory,
@@ -4958,7 +5079,13 @@ def create_pj_summary(
         f"0004_PJサマリ_step0004_単月_損益計算書_{iEndYear}年{pszEndMonth}月.tsv",
     )
     objSingleStep0003Rows = read_tsv_rows(pszSingleStep0003Path)
-    objSingleStep0004Rows = build_step0004_rows_for_summary(objSingleStep0003Rows)
+    pszSummaryOrgMode = "legacy"
+    try:
+        pszSummaryOrgMode = detect_step0004_org_mode(objSingleStep0003Rows)
+        objSingleStep0004Rows = build_step0004_rows_for_summary(objSingleStep0003Rows)
+    except ValueError as exc:
+        write_step0004_error_file(pszSingleStep0004Path, exc)
+        return
     write_tsv_rows(pszSingleStep0004Path, objSingleStep0004Rows)
     pszSingleStep0005Path: str = os.path.join(
         pszDirectory,
@@ -5105,7 +5232,14 @@ def create_pj_summary(
         ),
     )
     objCumulativeStep0003Rows = read_tsv_rows(pszCumulativeStep0003Path)
-    objCumulativeStep0004Rows = build_step0004_rows_for_summary(objCumulativeStep0003Rows)
+    try:
+        pszCumulativeOrgMode = detect_step0004_org_mode(objCumulativeStep0003Rows)
+        if pszSummaryOrgMode != pszCumulativeOrgMode:
+            raise ValueError("step0004 集計エラー: 単月と累計で組織判定結果が一致しません。")
+        objCumulativeStep0004Rows = build_step0004_rows_for_summary(objCumulativeStep0003Rows)
+    except ValueError as exc:
+        write_step0004_error_file(pszCumulativeStep0004Path, exc)
+        return
     write_tsv_rows(pszCumulativeStep0004Path, objCumulativeStep0004Rows)
     pszCumulativeStep0005Path: str = os.path.join(
         pszDirectory,
@@ -5134,10 +5268,12 @@ def create_pj_summary(
     pszStep0007Path: str = pszStep0006Path.replace("step0006_", "step0007_", 1)
     write_tsv_rows(pszStep0007Path, objStep0007Rows)
     if objStart != objEnd and bWriteTotalsExcel:
+        write_company_or_division_file(pszSummaryOrgMode)
         insert_step0006_rows_into_company_summary_excel(
             objStep0007Rows,
             objStart,
             objEnd,
+            pszSummaryOrgMode,
         )
 
     objSingleOutputRows: List[List[str]] = []
@@ -6250,6 +6386,7 @@ def copy_company_step0006_files(
     objPaths: List[Optional[str]],
     pszTargetFolder: str,
     create_step0007: bool = True,
+    pszOrgMode: Optional[str] = None,
 ) -> None:
     pszTargetDirectory: str = os.path.join(get_script_base_directory(), pszTargetFolder)
     os.makedirs(pszTargetDirectory, exist_ok=True)
@@ -6259,6 +6396,7 @@ def copy_company_step0006_files(
         for pszOutputPath in build_company_step0006_files(
             pszPath,
             create_step0007=create_step0007,
+            pszOrgMode=pszOrgMode,
         ):
             pszTargetPath: str = os.path.join(pszTargetDirectory, os.path.basename(pszOutputPath))
             shutil.copy2(pszOutputPath, pszTargetPath)
@@ -6267,6 +6405,7 @@ def copy_company_step0006_files(
 def build_company_step0006_files(
     pszStep0005Path: str,
     create_step0007: bool = True,
+    pszOrgMode: Optional[str] = None,
 ) -> List[str]:
     objRows = read_tsv_rows(pszStep0005Path)
     if not objRows:
@@ -6297,7 +6436,10 @@ def build_company_step0006_files(
         write_tsv_rows(pszOutputPath, objOutputRows)
         objOutputPaths.append(pszOutputPath)
         if create_step0007 and os.path.basename(pszOutputPath).startswith("0001_CP別_step0006_"):
-            create_cp_step0007_file_0001(pszOutputPath)
+            create_cp_step0007_file_0001(
+                pszOutputPath,
+                pszOrgMode=pszOrgMode,
+            )
         if create_step0007 and os.path.basename(pszOutputPath).startswith("0002_CP別_step0006_"):
             create_cp_step0007_file_0002(pszOutputPath)
     return objOutputPaths
@@ -6721,6 +6863,8 @@ def create_pj_summary_pl_cr_manhour_all_project_excel(
         iSeconds: int = int(objMatch.group(3))
         return (iHours * 3600 + iMinutes * 60 + iSeconds) / 86400.0
 
+    objSheetNamePattern = re.compile(r"^(P\d{5}|[A-OQ-Z]\d{3})")
+
     objValidInputs: List[Tuple[str, str]] = [
         (pszProjectName, pszInputPath)
         for pszProjectName, pszInputPath in objProjectInputs
@@ -6745,7 +6889,11 @@ def create_pj_summary_pl_cr_manhour_all_project_excel(
             objSheet = objTemplateSheet
         else:
             objSheet = objWorkbook.copy_worksheet(objTemplateSheet)
-        objSheet.title = pszProjectName
+        objSheetNameMatch = objSheetNamePattern.match(pszProjectName)
+        if objSheetNameMatch:
+            objSheet.title = objSheetNameMatch.group(1)
+        else:
+            objSheet.title = pszProjectName
         objRows = read_tsv_rows(pszInputPath)
         for iRowIndex, objRow in enumerate(objRows, start=1):
             pszRowLabel: str = objRow[0] if len(objRow) >= 1 else ""
@@ -7901,18 +8049,34 @@ def build_cp_company_step0008_vertical(
     pszDirectory: str,
     pszPeriodLabel: str,
     pszTimeLabel: str,
+    pszOrgMode: str,
 ) -> Optional[str]:
-    objCompanyOrder: List[str] = [
-        "第一インキュ",
-        "第二インキュ",
-        "第三インキュ",
-        "第四インキュ",
-        "事業開発",
-        "子会社",
-        "投資先",
-        "本部",
-        "合計",
-    ]
+    if pszOrgMode == "new":
+        objCompanyOrder: List[str] = [
+            "テクノロジーインキュベーション",
+            "コンテンツビジネス",
+            "スタートアップサイド",
+            "スタートアップコミュニティ",
+            "スタートアップグロース",
+            "経営管理",
+            "事業開発",
+            "子会社",
+            "投資先",
+            "本部",
+            "合計",
+        ]
+    else:
+        objCompanyOrder = [
+            "第一インキュ",
+            "第二インキュ",
+            "第三インキュ",
+            "第四インキュ",
+            "事業開発",
+            "子会社",
+            "投資先",
+            "本部",
+            "合計",
+        ]
     pszPrefix: str = (
         f"0001_CP別_step0007_{pszPeriodLabel}_損益計算書_{pszTimeLabel}_"
     )
@@ -7939,7 +8103,36 @@ def build_cp_company_step0008_vertical(
     return pszOutputPath
 
 
-def try_create_cp_company_step0008_vertical(pszStep0007Path: str) -> Optional[str]:
+def try_create_cp_company_step0008_vertical(
+    pszStep0007Path: str,
+    pszOrgMode: Optional[str] = None,
+) -> Optional[str]:
+    def resolve_org_mode(pszHint: Optional[str]) -> Optional[str]:
+        if pszHint in ("legacy", "new"):
+            return pszHint
+        if EXECUTION_ROOT_DIRECTORY is None:
+            return None
+        pszModePath: str = os.path.join(
+            EXECUTION_ROOT_DIRECTORY,
+            "company_or_division.txt",
+        )
+        if not os.path.isfile(pszModePath):
+            return None
+        try:
+            with open(pszModePath, "r", encoding="utf-8", newline="") as objModeFile:
+                pszModeLabel: str = objModeFile.read().strip().lower()
+        except OSError:
+            return None
+        if pszModeLabel == "company":
+            return "legacy"
+        if pszModeLabel == "division":
+            return "new"
+        return None
+
+    pszResolvedOrgMode = resolve_org_mode(pszOrgMode)
+    if pszResolvedOrgMode is None:
+        return None
+
     pszFileName = os.path.basename(pszStep0007Path)
     objMatch = re.match(
         r"0001_CP別_step0007_(単月|累計)_損益計算書_(.+?)_(.+)_vertical\.tsv",
@@ -7950,17 +8143,32 @@ def try_create_cp_company_step0008_vertical(pszStep0007Path: str) -> Optional[st
     pszPeriodLabel: str = objMatch.group(1)
     pszTimeLabel: str = objMatch.group(2)
     pszCompanyLabel: str = objMatch.group(3)
-    objAllowedCompanies: set[str] = {
-        "第一インキュ",
-        "第二インキュ",
-        "第三インキュ",
-        "第四インキュ",
-        "事業開発",
-        "子会社",
-        "投資先",
-        "本部",
-        "合計",
-    }
+    if pszResolvedOrgMode == "new":
+        objAllowedCompanies: set[str] = {
+            "テクノロジーインキュベーション",
+            "コンテンツビジネス",
+            "スタートアップサイド",
+            "スタートアップコミュニティ",
+            "スタートアップグロース",
+            "経営管理",
+            "事業開発",
+            "子会社",
+            "投資先",
+            "本部",
+            "合計",
+        }
+    else:
+        objAllowedCompanies = {
+            "第一インキュ",
+            "第二インキュ",
+            "第三インキュ",
+            "第四インキュ",
+            "事業開発",
+            "子会社",
+            "投資先",
+            "本部",
+            "合計",
+        }
     if pszCompanyLabel not in objAllowedCompanies:
         return None
     pszDirectory: str = os.path.dirname(pszStep0007Path)
@@ -7968,6 +8176,7 @@ def try_create_cp_company_step0008_vertical(pszStep0007Path: str) -> Optional[st
         pszDirectory,
         pszPeriodLabel,
         pszTimeLabel,
+        pszResolvedOrgMode,
     )
 
 
@@ -8170,6 +8379,24 @@ def parse_tsv_value_for_excel(pszValue: str) -> Optional[object]:
 
 
 def create_cp_company_step0009_excel(pszScriptDirectory: str) -> Optional[str]:
+    def read_company_or_division_mode_label() -> Optional[str]:
+        if not EXECUTION_ROOT_DIRECTORY:
+            return None
+        pszModePath: str = os.path.join(
+            EXECUTION_ROOT_DIRECTORY,
+            "company_or_division.txt",
+        )
+        if not os.path.isfile(pszModePath):
+            return None
+        try:
+            with open(pszModePath, "r", encoding="utf-8", newline="") as objModeFile:
+                pszModeLabel: str = objModeFile.read().strip().lower()
+        except OSError:
+            return None
+        if pszModeLabel in ("company", "division"):
+            return pszModeLabel
+        return None
+
     pszTargetDirectory: str = os.path.join(pszScriptDirectory, "0001_CP別_step0009")
     if not os.path.isdir(pszTargetDirectory):
         return None
@@ -8243,9 +8470,16 @@ def create_cp_company_step0009_excel(pszScriptDirectory: str) -> Optional[str]:
         if not objTsvPaths:
             return None
 
+    pszModeLabel = read_company_or_division_mode_label()
+    if pszModeLabel == "division":
+        pszTemplateFileName = "TEMPLATE_CP別経営管理_計上div_累計.xlsx"
+        pszOutputFileNamePrefix = "CP別経営管理_計上div_累計"
+    else:
+        pszTemplateFileName = "TEMPLATE_CP別経営管理_計上カンパニー_累計.xlsx"
+        pszOutputFileNamePrefix = "CP別経営管理_計上カンパニー_累計"
     pszTemplatePath: str = os.path.join(
         pszScriptDirectory,
-        "TEMPLATE_CP別経営管理_計上カンパニー_累計.xlsx",
+        pszTemplateFileName,
     )
     if not os.path.isfile(pszTemplatePath):
         return None
@@ -8274,10 +8508,10 @@ def create_cp_company_step0009_excel(pszScriptDirectory: str) -> Optional[str]:
         pszStartLabel = f"{iStartYear}年{iStartMonth:02d}月"
         pszEndLabel = f"{iEndYear}年{iEndMonth:02d}月"
         pszOutputFileName = (
-            f"CP別経営管理_計上カンパニー_累計_{pszStartLabel}-{pszEndLabel}.xlsx"
+            f"{pszOutputFileNamePrefix}_{pszStartLabel}-{pszEndLabel}.xlsx"
         )
     else:
-        pszOutputFileName = "CP別経営管理_計上カンパニー_累計.xlsx"
+        pszOutputFileName = f"{pszOutputFileNamePrefix}.xlsx"
     pszOutputPath: str = os.path.join(
         pszTargetDirectory,
         pszOutputFileName,
@@ -8628,14 +8862,20 @@ def create_cp_step0007_file_company(pszStep0006Path: str, pszPrefix: str) -> Non
     shutil.copy2(pszOutputPath, pszTargetPath)
 
 
-def create_cp_step0007_file_0001(pszStep0006Path: str) -> None:
+def create_cp_step0007_file_0001(
+    pszStep0006Path: str,
+    pszOrgMode: Optional[str] = None,
+) -> None:
     create_cp_step0007_file_company(pszStep0006Path, "0001_CP別")
     pszOutputPath = os.path.join(
         get_script_base_directory(),
         os.path.basename(pszStep0006Path).replace("_step0006_", "_step0007_"),
     )
     if os.path.isfile(pszOutputPath):
-        try_create_cp_company_step0008_vertical(pszOutputPath)
+        try_create_cp_company_step0008_vertical(
+            pszOutputPath,
+            pszOrgMode=pszOrgMode,
+        )
 
 
 def create_cp_step0007_file_0002(pszStep0006Path: str) -> None:
