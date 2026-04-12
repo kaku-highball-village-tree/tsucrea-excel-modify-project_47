@@ -3745,7 +3745,18 @@ def build_step0004_rows_for_summary(objRows: List[List[str]]) -> List[List[str]]
     if pszOrgMode == "legacy":
         objTargetNames: List[str] = objLegacyExclusiveNames + objCommonNames
     else:
-        objTargetNames = objNewExclusiveNames + objCommonNames
+        objTargetNames = [
+            "コンテンツビジネス",
+            "スタートアップコミュニティ",
+            "スタートアップグロース",
+            "経営管理",
+            "テクノロジーインキュベーション",
+            "事業開発",
+            "スタートアップサイド",
+            "子会社",
+            "投資先",
+            "本部",
+        ]
 
     objTargetSet = set(objTargetNames)
     iMaxColumns: int = max(len(objRow) for objRow in objRows) if objRows else 0
