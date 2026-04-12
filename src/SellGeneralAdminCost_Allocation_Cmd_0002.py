@@ -3941,7 +3941,7 @@ def build_step0006_rows_for_summary(objRows: List[List[str]]) -> List[List[str]]
         -1,
     )
     if iAllocationIndex >= 0:
-        objLabelRow[iAllocationIndex] = "グループ別合計"
+        objLabelRow[iAllocationIndex] = "div別合計"
     return [objLabelRow] + [list(objRow) for objRow in objRows]
 
 
