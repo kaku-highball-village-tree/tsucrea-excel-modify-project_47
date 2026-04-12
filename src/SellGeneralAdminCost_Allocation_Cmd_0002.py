@@ -6815,6 +6815,8 @@ def create_pj_summary_pl_cr_manhour_excel(
     if objSheetNameMatch:
         objSheet.title = objSheetNameMatch.group(1)
     objRows = read_tsv_rows(pszInputPath)
+    objValueColumnIndices = {2, 6}
+    objCurrencyTargetRows = {"工数1時間当たり純売上高", "工数1時間当たり営業利益"}
     for iRowIndex, objRow in enumerate(objRows, start=1):
         pszRowLabel: str = objRow[0] if len(objRow) >= 1 else ""
         for iColumnIndex, pszValue in enumerate(objRow, start=1):
@@ -6824,11 +6826,13 @@ def create_pj_summary_pl_cr_manhour_excel(
                 column=iColumnIndex,
                 value=objCellValue,
             )
-            if pszRowLabel == "工数行(h:mm:ss)" and iColumnIndex in (2, 5):
+            if pszRowLabel == "工数行(h:mm:ss)" and iColumnIndex in objValueColumnIndices:
                 objExcelTimeSerial = parse_h_mm_ss_to_excel_serial(pszValue)
                 if objExcelTimeSerial is not None:
                     objCell.value = objExcelTimeSerial
                     objCell.number_format = "[h]:mm:ss"
+            elif pszRowLabel in objCurrencyTargetRows and iColumnIndex in objValueColumnIndices:
+                objCell.number_format = "#,##0;[Red]-#,##0"
     pszTargetDirectory: str = os.path.join(
         pszDirectory,
         "PJサマリ",
