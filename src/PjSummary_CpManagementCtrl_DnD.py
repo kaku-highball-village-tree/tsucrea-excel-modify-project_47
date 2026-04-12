@@ -73,7 +73,7 @@ BUTTON_LABELS: Tuple[str, ...] = (
     "division利益率順位",
     "プロジェクト別損益",
     "グループ別損益",
-    "カンパニー別損益",
+    "division別損益",
     "CP別経営管理用(計上division)",
     "CP別経営管理用(計上グループ)",
     "PJ別損益計算書",
