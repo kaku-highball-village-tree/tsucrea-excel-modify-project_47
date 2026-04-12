@@ -3731,10 +3731,13 @@ def build_step0004_rows_for_summary(objRows: List[List[str]]) -> List[List[str]]
     ]
     objHeaderRow: List[str] = objRows[0]
     objTotalRow: Optional[List[str]] = None
+    objFirstColumnNames: set[str] = set()
     for objRow in objRows:
         if not objRow:
             continue
         pszName = objRow[0].strip()
+        if pszName != "":
+            objFirstColumnNames.add(pszName)
         if pszName == "科目名":
             objHeaderRow = objRow
         elif pszName == "合計" and objTotalRow is None:
