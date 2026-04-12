@@ -6713,6 +6713,21 @@ def _clear_sheet_borders_below_last_row(
             objCell.border = Border()
 
 
+def _clear_sheet_values(objSheet) -> None:
+    iMaxRow: int = objSheet.max_row
+    iMaxColumn: int = objSheet.max_column
+    if iMaxRow <= 0 or iMaxColumn <= 0:
+        return
+    for objRow in objSheet.iter_rows(
+        min_row=1,
+        max_row=iMaxRow,
+        min_col=1,
+        max_col=iMaxColumn,
+    ):
+        for objCell in objRow:
+            objCell.value = None
+
+
 def create_pj_summary_sales_cost_sg_admin_margin_excel(pszDirectory: str) -> Optional[str]:
     objCandidates: List[str] = []
     objPattern = re.compile(r"^0001_PJサマリ_step0009_.*_単月・累計_損益計算書\.tsv$")
@@ -6733,14 +6748,14 @@ def create_pj_summary_sales_cost_sg_admin_margin_excel(pszDirectory: str) -> Opt
         return None
     objWorkbook = load_workbook(pszTemplatePath)
     objTemplateSheet = objWorkbook.worksheets[0]
-    for iIndex, pszInputName in enumerate(objCandidates):
-        if iIndex < len(objWorkbook.worksheets):
-            objSheet = objWorkbook.worksheets[iIndex]
-        else:
-            objSheet = objWorkbook.copy_worksheet(objTemplateSheet)
+    for objSheetToRemove in objWorkbook.worksheets[1:]:
+        objWorkbook.remove(objSheetToRemove)
+    for pszInputName in objCandidates:
+        objSheet = objWorkbook.copy_worksheet(objTemplateSheet)
         objSheetNameMatch = objSheetNamePattern.match(pszInputName)
         if objSheetNameMatch:
             objSheet.title = objSheetNameMatch.group(1)
+        _clear_sheet_values(objSheet)
         objRows = read_tsv_rows(os.path.join(pszDirectory, pszInputName))
         iFormatRowIndex: int = 2 if objSheet.max_row >= 2 else 1
         iLastColumn: int = max((len(objRow) for objRow in objRows), default=0)
@@ -7334,17 +7349,17 @@ def create_step0010_pj_income_statement_range_excel_from_tsvs(
 
     objWorkbook = load_workbook(pszTemplatePath)
     objTemplateSheet = objWorkbook.worksheets[0]
+    for objSheetToRemove in objWorkbook.worksheets[1:]:
+        objWorkbook.remove(objSheetToRemove)
 
-    for iIndex, (objYearMonth, pszPath) in enumerate(objPathPairs):
+    for objYearMonth, pszPath in objPathPairs:
         pszSheetName: str = f"{objYearMonth[0]}年{objYearMonth[1]:02d}月"
         if bVertical:
             pszSheetName = f"{pszSheetName}_vertical"
 
-        if iIndex == 0:
-            objSheet = objTemplateSheet
-        else:
-            objSheet = objWorkbook.copy_worksheet(objTemplateSheet)
+        objSheet = objWorkbook.copy_worksheet(objTemplateSheet)
         objSheet.title = pszSheetName
+        _clear_sheet_values(objSheet)
 
         objRows = read_tsv_rows(pszPath)
         iLastColumn: int = max((len(objRow) for objRow in objRows), default=0)
@@ -8503,11 +8518,14 @@ def create_cp_company_step0009_excel(pszScriptDirectory: str) -> Optional[str]:
 
     objWorkbook = load_workbook(pszTemplatePath)
     objTemplateSheet = objWorkbook.worksheets[0]
+    for objSheetToRemove in objWorkbook.worksheets[1:]:
+        objWorkbook.remove(objSheetToRemove)
     for pszPeriodLabel, pszInputPath in objTsvPaths:
         if pszPeriodLabel in objWorkbook.sheetnames:
             objWorkbook.remove(objWorkbook[pszPeriodLabel])
         objSheet = objWorkbook.copy_worksheet(objTemplateSheet)
         objSheet.title = pszPeriodLabel
+        _clear_sheet_values(objSheet)
         objRows = read_tsv_rows(pszInputPath)
         for iRowIndex, objRow in enumerate(objRows, start=1):
             for iColumnIndex, pszValue in enumerate(objRow, start=1):
