@@ -6781,6 +6781,8 @@ def create_pj_summary_sales_cost_sg_admin_margin_excel(pszDirectory: str) -> Opt
             len(objRows) + 1,
             max(iLastColumn, objSheet.max_column),
         )
+    if objTemplateSheet in objWorkbook.worksheets:
+        objWorkbook.remove(objTemplateSheet)
     pszTargetDirectory: str = os.path.join(pszDirectory, "PJサマリ")
     os.makedirs(pszTargetDirectory, exist_ok=True)
     pszOutputPath: str = os.path.join(
@@ -7375,6 +7377,8 @@ def create_step0010_pj_income_statement_range_excel_from_tsvs(
             iLastColumn,
         )
         _normalize_step0010_manhour_label_fonts(objSheet, len(objRows))
+    if objTemplateSheet in objWorkbook.worksheets:
+        objWorkbook.remove(objTemplateSheet)
 
     pszOutputName: str = (
         f"販管費配賦後_損益計算書_{pszStartLabel}-{pszEndLabel}_A∪B_プロジェクト名_C∪D_vertical.xlsx"
